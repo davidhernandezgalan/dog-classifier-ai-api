@@ -1,4 +1,4 @@
-fastapi==0.115.11
+fastapi[standard]==0.115.11
 pillow==11.1.0
 transformers==4.49.0
 torch==2.6.0
