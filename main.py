@@ -5,6 +5,7 @@ from transformers import AutoImageProcessor, AutoModelForImageClassification
 import PIL
 import requests
 import os
+import json
 
 # Load env variables for development or production
 load_dotenv()
@@ -68,9 +69,27 @@ def search_dog(data: dict = Body(...)):
         if type(data) is not dict or "url" not in data:
             return { "error": True, "message": "No se ha proporcionado una URL de imagen." }
         
-        # TODO: Implement NSFW image classification
+        datos = requests.post("https://api.clarifai.com/v2/users/clarifai/apps/main/models/general-image-detection/versions/1580bb1932594c93b7e2e04456af7c6f/outputs",
+            headers={
+                "Authorization": "Key " + os.getenv("CLARIFAI_API_KEY"),
+                "Content-Type": "application/json"
+            },
+            data=json.dumps({
+                "inputs": [{
+                    "data": {
+                        "image": { "url": data["url"] }
+                    }
+                }]
+            })
+        )
+        datos = datos.json()
+
+        # Lista de objetos encontrados en la imagen
+        regionesClasificadas = datos["outputs"][0]["data"]["regions"]
+
+        includesDog = True in [region["data"]["concepts"][0]["name"].lower() == "dog" for region in regionesClasificadas]
+
+        return { "error": False, "includes_dog": includesDog }
     except Exception as error:
         print(error)
-        return { "error": True, "message": "Ocurrió un error al clasificar la imagen." }
-    
-    return { "error": False, "message": "Sin implementar" }
+        return { "error": True, "message": "Ocurrió un error al encontrar un perro en la imagen." }
