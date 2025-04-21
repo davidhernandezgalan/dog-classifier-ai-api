@@ -1,17 +1,23 @@
 from dotenv import load_dotenv
 from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
-from transformers import AutoImageProcessor, AutoModelForImageClassification
+from transformers import AutoImageProcessor, AutoModelForImageClassification, ViTImageProcessor
 import PIL
 import requests
 import os
 import json
+import torch
 
 # Load env variables for development or production
 load_dotenv()
 
+# Dog breeds model
 image_processor = AutoImageProcessor.from_pretrained("wesleyacheng/dog-breeds-multiclass-image-classification-with-vit")
 model = AutoModelForImageClassification.from_pretrained("wesleyacheng/dog-breeds-multiclass-image-classification-with-vit")
+
+# NSFW model
+nsfw_image_processor = ViTImageProcessor.from_pretrained('Falconsai/nsfw_image_detection')
+nsfw_model = AutoModelForImageClassification.from_pretrained("Falconsai/nsfw_image_detection")
 
 app = FastAPI()
 
@@ -56,12 +62,21 @@ def nsfw(data: dict = Body(...)):
         if type(data) is not dict or "url" not in data:
             return { "error": True, "message": "No se ha proporcionado una URL de imagen." }
         
-        # TODO: Implement NSFW image classification
+        image = PIL.Image.open(requests.get(data["url"], stream=True).raw)
+        with torch.no_grad():
+            inputs = nsfw_image_processor(images=image, return_tensors="pt")
+        
+            outputs = nsfw_model(**inputs)
+            logits = outputs.logits
+
+        # model predicts if the image is NSFW or not
+        predicted_class_idx = logits.argmax(-1).item()
     except Exception as error:
         print(error)
         return { "error": True, "message": "Ocurrió un error al clasificar la imagen." }
     
-    return { "error": False, "message": "Sin implementar" }
+    result = True if nsfw_model.config.id2label[predicted_class_idx] == "nsfw" else False
+    return { "error": False, "nsfw": result }
 
 @app.post("/search_dog")
 def search_dog(data: dict = Body(...)):
